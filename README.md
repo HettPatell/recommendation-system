@@ -4,48 +4,75 @@ A Proof of Concept (POC) demonstrating how quick-commerce platforms like **Blink
 
 ---
 
-## 🚀 Live Demo & How to Run
+## 🚀 Live Local Demo
 
-The backend server is already running on `http://127.0.0.1:8000`.
+The backend server runs locally on:
+👉 **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
 
-To start it manually at any time:
+To run it locally at any time:
 ```bash
 cd C:\Users\ADMIN\.gemini\antigravity\scratch\blinkit-recommender
 python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Then open your browser at:
-👉 **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
+---
+
+## ☁️ Deploy on Vercel
+
+This project is configured and ready for 1-click deployment on **Vercel** with:
+- `vercel.json` (rewrites `/api/*` to serverless Python function)
+- `api/index.py` (Vercel Serverless Function entry point)
+- `public/` (Static frontend served via Vercel Edge CDN)
+- `requirements.txt` (Python runtime dependencies)
+
+### Method 1: Deploy with Vercel CLI (Fastest)
+
+Open PowerShell / Terminal in this project directory and run:
+
+```bash
+cd C:\Users\ADMIN\.gemini\antigravity\scratch\blinkit-recommender
+npx vercel
+```
+
+1. Log in to your Vercel account when prompted in the browser.
+2. Confirm the project settings (press `Enter` for defaults).
+3. Vercel will build and give you a live production URL (e.g. `https://blinkit-recommender.vercel.app`)!
+
+To deploy straight to production later:
+```bash
+npx vercel --prod
+```
+
+---
+
+### Method 2: Deploy with GitHub & Vercel Dashboard
+
+1. Initialize a git repo and push to your GitHub:
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit of Blinkit Recommender POC"
+   git remote add origin https://github.com/<your-username>/blinkit-recommender.git
+   git push -u origin main
+   ```
+2. Go to [vercel.com/new](https://vercel.com/new).
+3. Import your GitHub repository.
+4. Leave all build settings as default (Vercel automatically detects `vercel.json` and `api/index.py`).
+5. Click **Deploy**!
 
 ---
 
 ## 🧠 How the Vector Embedding System Works
 
-### 1. High-Dimensional Product Vectorization
-Every grocery item contains rich semantic metadata:
-- Product title & brand (e.g., *Amul Salted Butter 100g*)
-- Taxonomy & category (*Dairy, Bread & Eggs > Butter & Spreads*)
-- Dietary, usage occasions, & tags (*toast companion, morning breakfast, baking, pav bhaji*)
-- Co-occurrence & pairing associations (*bread, pav, paratha, eggs, jam*)
-
-The metadata is transformed via **TF-IDF + Latent Semantic Analysis (Truncated SVD)** into a **24-dimensional dense semantic vector**:
-$$\vec{v}_i \in \mathbb{R}^{24}, \quad \|\vec{v}_i\|_2 = 1.0$$
-
-### 2. Multi-Item Order / Cart Vector Aggregation
-When a customer orders multiple items $(p_1, p_2, \dots)$, the system creates an aggregate **Cart Centroid Vector** with a recency boost $w_i$:
-$$\vec{v}_{\text{cart}} = \frac{\sum_{i \in \text{order}} w_i \vec{v}_i}{\left\|\sum_{i \in \text{order}} w_i \vec{v}_i\right\|_2}$$
-
-### 3. Real-Time Cosine Similarity Search
-Because all embeddings are $L_2$-normalized to unit length:
-$$\text{Cosine Similarity}(\vec{v}_{\text{cart}}, \vec{v}_j) = \vec{v}_{\text{cart}} \cdot \vec{v}_j = \sum_{k=1}^{24} v_{\text{cart}, k} \cdot v_{j, k}$$
-
-The Top-$K$ nearest neighbors with highest cosine scores are instantly ranked and displayed on the recommendation shelf.
-
-### 4. Interactive 2D Vector Space Visualizer
-Using **Principal Component Analysis (PCA)**, the 24-dimensional space is projected onto a 2D coordinate plane $(x, y) \in [-1, 1]$.
-- Nodes represent products colored by category clusters.
-- When an item is added or ordered, the Cart Vector $\vec{v}_{\text{cart}}$ appears as a pulsing gold star node.
-- Vectors shoot out to the nearest recommendations with real-time distance and match percentages.
+1. **High-Dimensional Product Vectorization**:
+   Every grocery item is transformed via **TF-IDF + Latent Semantic Analysis (Truncated SVD)** into a **24-dimensional dense semantic vector** ($\|\vec{v}_i\|_2 = 1.0$).
+2. **Order / Cart Vector Aggregation**:
+   When a customer adds multiple items, an aggregate normalized centroid vector $\vec{v}_{\text{cart}}$ is generated.
+3. **Real-Time Cosine Similarity**:
+   Because all vectors are unit length, cosine similarity is calculated via dot product:
+   $$\text{Cosine Similarity}(\vec{v}_{\text{cart}}, \vec{v}_j) = \vec{v}_{\text{cart}} \cdot \vec{v}_j$$
+4. **In-Cart Dynamic Recommendations**:
+   The cart drawer features a **"Frequently Bought Together"** shelf that re-calculates nearest neighbors instantly whenever an item is added or removed.
 
 ---
 
@@ -54,28 +81,25 @@ Using **Principal Component Analysis (PCA)**, the 24-dimensional space is projec
 ```
 blinkit-recommender/
 │
+├── api/
+│   └── index.py              # Vercel Serverless Function entry point
+│
 ├── data/
-│   └── catalog.json          # 36 realistic Blinkit grocery items with pricing, tags & pairings
+│   └── catalog.json          # 36 products with pricing, tags, pairings & precomputed vectors
 │
-├── engine.py                 # Vector embedding generator, LSA, L2-norm, cosine similarity & PCA
-├── main.py                   # FastAPI backend server with REST APIs
-├── test_api.py               # Automated verification test script
+├── public/                   # Static assets served via Vercel Edge CDN
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
 │
-└── static/
-    ├── index.html            # Blinkit-themed UI with 10-minute delivery header & Vector Lab
-    ├── style.css             # Authentic Blinkit colors (#f8cb46, #0c831f), responsive card grid
-    └── app.js                # Frontend state, HTML5 Canvas vector visualizer, cart drawer & order flow
+├── static/                   # Static assets for local development
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
+│
+├── engine.py                 # Vector embedding generator & cosine similarity engine
+├── main.py                   # FastAPI backend server
+├── requirements.txt          # Python dependencies for Vercel
+├── vercel.json               # Vercel routing configuration
+└── .gitignore
 ```
-
----
-
-## 🔌 API Reference
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `GET /api/products` | GET | List all products with optional `?category=` filter |
-| `GET /api/categories` | GET | Returns available categories and product counts |
-| `POST /api/recommend` | POST | Takes `{ ordered_ids: ["p2"], top_k: 6 }` and returns nearest vector neighbors |
-| `GET /api/vector-map` | GET | Returns 2D coordinates of all items for the Canvas map |
-| `GET /api/inspect/{id}` | GET | Returns detailed 24-D embedding weights for a specific product |
-| `POST /api/order/simulate` | POST | Simulates placing an order and returns post-order quick suggestions |

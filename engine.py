@@ -38,42 +38,48 @@ class VectorRecommenderEngine:
             prod["catalog_index"] = i
             self.product_map[prod["id"]] = prod
 
-        # Construct rich semantic contextual documents
-        corpus = []
-        for p in self.products:
-            # Pairings and tags repeated with higher weight to emphasize cross-product affinities
-            pairings_str = " ".join(p.get("pairings", [])) * 3
-            tags_str = " ".join(p.get("tags", [])) * 2
-            doc = (
-                f"{p['name']} {p['brand']} {p['category']} {p['subcategory']} "
-                f"{tags_str} {pairings_str} {p.get('description', '')}"
+        has_precomputed = len(self.products) > 0 and all("embedding" in p for p in self.products)
+        if has_precomputed:
+            self.embeddings = normalize(np.array([p["embedding"] for p in self.products], dtype=np.float32), norm="l2")
+            self.pca = PCA(n_components=2, random_state=42)
+            coords_2d = self.pca.fit_transform(self.embeddings)
+            max_abs = np.max(np.abs(coords_2d)) if np.max(np.abs(coords_2d)) > 0 else 1.0
+            self.pca_2d = coords_2d / max_abs
+            actual_dims = self.embeddings.shape[1]
+        else:
+            # Construct rich semantic contextual documents
+            corpus = []
+            for p in self.products:
+                pairings_str = " ".join(p.get("pairings", [])) * 3
+                tags_str = " ".join(p.get("tags", [])) * 2
+                doc = (
+                    f"{p['name']} {p['brand']} {p['category']} {p['subcategory']} "
+                    f"{tags_str} {pairings_str} {p.get('description', '')}"
+                )
+                corpus.append(doc)
+
+            # 1. TF-IDF feature extraction
+            self.vectorizer = TfidfVectorizer(
+                ngram_range=(1, 2),
+                sublinear_tf=True,
+                stop_words="english",
+                min_df=1
             )
-            corpus.append(doc)
+            tfidf_matrix = self.vectorizer.fit_transform(corpus)
 
-        # 1. TF-IDF feature extraction
-        self.vectorizer = TfidfVectorizer(
-            ngram_range=(1, 2),
-            sublinear_tf=True,
-            stop_words="english",
-            min_df=1
-        )
-        tfidf_matrix = self.vectorizer.fit_transform(corpus)
+            # 2. Dense Latent Semantic Analysis (Truncated SVD)
+            actual_dims = min(self.embedding_dim, tfidf_matrix.shape[1] - 1, len(corpus) - 1)
+            self.svd = TruncatedSVD(n_components=actual_dims, random_state=42)
+            dense_vectors = self.svd.fit_transform(tfidf_matrix)
 
-        # 2. Dense Latent Semantic Analysis (Truncated SVD)
-        # Cap dimensions if corpus is smaller
-        actual_dims = min(self.embedding_dim, tfidf_matrix.shape[1] - 1, len(corpus) - 1)
-        self.svd = TruncatedSVD(n_components=actual_dims, random_state=42)
-        dense_vectors = self.svd.fit_transform(tfidf_matrix)
+            # 3. L2 Normalization (so dot product equals cosine similarity)
+            self.embeddings = normalize(dense_vectors, norm="l2")
 
-        # 3. L2 Normalization (so dot product equals cosine similarity)
-        self.embeddings = normalize(dense_vectors, norm="l2")
-
-        # 4. 2D PCA Projection for frontend vector map visualizer
-        self.pca = PCA(n_components=2, random_state=42)
-        coords_2d = self.pca.fit_transform(self.embeddings)
-        # Scale coords to [-1.0, 1.0] for clean canvas rendering
-        max_abs = np.max(np.abs(coords_2d)) if np.max(np.abs(coords_2d)) > 0 else 1.0
-        self.pca_2d = coords_2d / max_abs
+            # 4. 2D PCA Projection
+            self.pca = PCA(n_components=2, random_state=42)
+            coords_2d = self.pca.fit_transform(self.embeddings)
+            max_abs = np.max(np.abs(coords_2d)) if np.max(np.abs(coords_2d)) > 0 else 1.0
+            self.pca_2d = coords_2d / max_abs
 
         # Store vector representations in product metadata
         for i, p in enumerate(self.products):
